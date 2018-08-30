@@ -1,2 +1,2 @@
-# ml_examples_for_web
+# Machine Learning Notebooks
 A collection of examples that I share through website
