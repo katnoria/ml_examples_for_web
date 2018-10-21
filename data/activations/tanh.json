@@ -1,6 +1,8 @@
 {
   "layer": [
     {
+      "height": 300,
+      "width": 300,
       "encoding": {
         "y": {"field": "y", "type": "quantitative"},
         "x": {"field": "x", "type": "quantitative"}
