@@ -1,0 +1,875 @@
+---
+title: "Glassdoor Reviews"
+author: "katnoria"
+url: "https://dash.sprinkleai.com/flexdash"
+output: 
+  flexdashboard::flex_dashboard:
+    navbar: 
+#      - {title: "R Markdown", href="#", alight=left}    
+---
+
+```{r}
+# Installation
+# install.packages("flexdashboard")
+# install.packages("leaflet")
+```
+
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(leaflet)
+library(dplyr)
+library(ggplot2)
+library(reshape2)
+library(stringr)
+library(treemap)
+
+set.seed(12345)
+
+reviews <- read.csv('data/employee_reviews.csv', stringsAsFactors = F)
+reviews <- reviews %>%
+  mutate(
+    company = str_to_sentence(company),
+    work.balance.stars = as.numeric(work.balance.stars), culture.values.stars=as.numeric(culture.values.stars),
+    carrer.opportunities.stars=as.numeric(carrer.opportunities.stars),
+    comp.benefit.stars=as.numeric(comp.benefit.stars), senior.mangemnet.stars=as.numeric(senior.mangemnet.stars)
+    )
+
+```
+
+Overall {data-orientation=rows}
+===================================== 
+
+Row 
+-----------------------------------------------------------------------
+
+```{r}
+overall_company_ratings <- reviews %>%
+  group_by(company) %>%
+  summarise(mean = round(mean(overall.ratings), 2))
+
+plot_gauge <- function(company_name) {
+  value <- overall_company_ratings %>%
+    filter(company == company_name) %>%
+    select(mean)
+  g <- gauge(value$mean, min = 0.0, max = 5.0, symbol = '%', gaugeSectors(
+    success = c(3.8, 5.0), warning = c(3.0, 3.8), danger = c(1.0, 3.0)
+  ))
+  return (g)
+}  
+
+# Get mean for all
+mean_workbalance <- round(mean(reviews$work.balance.stars, na.rm = T), 2)
+mean_culture <- round(mean(reviews$culture.values.stars, na.rm = T), 2)
+mean_opportunities <- round(mean(reviews$carrer.opportunities.stars, na.rm = T), 2)
+mean_benefits <- round(mean(reviews$comp.benefit.stars, na.rm = T), 2)
+mean_seniormanagement <- round(mean(reviews$senior.mangemnet.stars, na.rm = T), 2)
+```
+
+
+### Amazon
+
+```{r}
+plot_gauge("Amazon")
+```
+
+### Apple
+
+```{r}
+plot_gauge("Apple")
+```
+
+### Facebook
+
+```{r}
+plot_gauge("Facebook")
+```
+
+### Google
+
+```{r}
+plot_gauge("Google")
+```
+
+### Microsoft
+
+```{r}
+plot_gauge("Microsoft")
+```
+
+### Netflix
+
+```{r}
+plot_gauge("Netflix")
+```
+
+Row
+-----------------------------------------------------------------------
+
+### Reviewer Location
+
+```{r}
+locations <- read.csv("data/locations_review_25above.csv")
+reviews2 <- reviews %>%
+  left_join(locations, by = "location") %>%
+  select(c("location", "lat", "lon")) %>%
+  filter(location != "none")
+
+# Make sure locations is loaded (locations_review_25above.csv)
+leaflet(reviews2) %>% addTiles() %>%
+  addMarkers(clusterOptions = markerClusterOptions())
+```
+
+
+Row
+-----------------------------------------------------------------------
+### Ratings Heatmap
+
+```{r}
+ratings <- reviews %>%
+  group_by(company) %>%
+  summarise(
+    work.balance = mean(work.balance.stars, na.rm = T), culture=mean(culture.values.stars, na.rm = T),
+    opportunities=mean(carrer.opportunities.stars, na.rm = T), benefits=mean(comp.benefit.stars, na.rm = T),
+    management=mean(senior.mangemnet.stars, na.rm = T))
+
+melt(ratings) %>%
+  ggplot(aes(x=variable, y=company, fill=value)) +
+  geom_tile(color="white") +
+  scale_fill_gradient2(low="red", high="darkgreen", mid="#ffffbf", midpoint = 3.0, limit=c(1.0, 5.0)) +
+  xlab(NULL) +
+  ylab(NULL)
+```
+
+### Overall Ratings
+
+```{r}
+reviews %>%
+  select(c(company, overall.ratings)) %>%
+  group_by(company, overall.ratings) %>%
+  summarise(n=n()) %>%
+  mutate(overall.ratings.pct = n/sum(n)) %>%
+  ggplot(aes(overall.ratings, overall.ratings.pct, fill=company)) +
+  labs(x="Rating", y="Reviews (%)", fill="Company") +
+  geom_bar(stat = "identity") +
+  facet_wrap(~company)
+```
+
+
+```{r}
+filter_top20_titles <- function(company_name) {
+  grouped_job_title <- reviews %>%
+    filter(company == company_name) %>%
+    group_by(job.title) %>%
+    summarise(n=n()) %>%
+      mutate(percent = n/sum(n)) %>%
+      mutate(job.title = reorder(job.title, percent)) %>%
+      top_n(20)
+  
+  return (grouped_job_title)
+}
+
+filter_top20_locations <- function(company_name) {
+  grouped_job_title <- reviews %>%
+    filter(company == company_name) %>%
+    group_by(location) %>%
+    summarise(n=n()) %>%
+      mutate(percent = n/sum(n)) %>%
+      mutate(job.title = reorder(location, percent)) %>%
+      top_n(20)
+  
+  return (grouped_job_title)
+}
+```
+
+
+Amazon {data-orientation=rows}
+===================================== 
+
+Row 
+-----------------------------------------------------------------------
+
+```{r}
+indi_ratings <- function(company_name) {
+  indi_ratings <- reviews %>%
+    filter(company == company_name) %>%
+    summarise(
+      work.balance = round(mean(work.balance.stars, na.rm = T), digits = 2), 
+      culture = round(mean(culture.values.stars, na.rm = T), digits = 2),
+      opportunities = round(mean(carrer.opportunities.stars, na.rm = T), digits = 2), 
+      benefits = round(mean(comp.benefit.stars, na.rm = T), digits = 2),
+      management = round(mean(senior.mangemnet.stars, na.rm = T), digits = 2))  
+  
+    return (indi_ratings)
+}
+
+amzn_ratings <- indi_ratings("Amazon")
+```
+
+### Work/Life Balance
+
+```{r}
+# gauge(amzn_ratings$work.balance, min = 0.0, max = 5.0, symbol = '%', gaugeSectors(
+#   success = c(3.7, 5.0), warning = c(3.0, 3.7), danger = c(1.0, 3.0)
+# ))
+
+show_valueBox <- function(value, benchmark) {
+  return (
+    valueBox(value, color = ifelse(value >= benchmark, "primary", "warning"))
+  )
+}
+#valueBox(amzn_ratings$work.balance, color = ifelse(amzn_ratings$work.balance >= mean_workbalance, "success", "warning"))
+show_valueBox(amzn_ratings$work.balance, mean_workbalance)
+```
+
+### Culture
+
+```{r}
+# gauge(amzn_ratings$culture, min = 0.0, max = 5.0, symbol = '%', gaugeSectors(
+#   success = c(3.7, 5.0), warning = c(3.0, 3.7), danger = c(1.0, 3.0)
+# ))
+valueBox(amzn_ratings$culture, color = ifelse(amzn_ratings$culture >= mean_culture, "primary", "warning"))
+```
+
+### Opportunities
+
+```{r}
+# gauge(amzn_ratings$opportunities, min = 0.0, max = 5.0, symbol = '%', gaugeSectors(
+#   success = c(3.7, 5.0), warning = c(3.0, 3.7), danger = c(1.0, 3.0)
+# ))
+valueBox(amzn_ratings$opportunities, color = ifelse(amzn_ratings$opportunities >= mean_opportunities, "primary", "warning"))
+```
+
+### Benefits
+
+```{r}
+# gauge(amzn_ratings$benefits, min = 0.0, max = 5.0, symbol = '%', gaugeSectors(
+#   success = c(3.7, 5.0), warning = c(3.0, 3.7), danger = c(1.0, 3.0)
+# ))
+valueBox(amzn_ratings$benefits, color = ifelse(amzn_ratings$benefits >= mean_benefits, "primary", "warning"))
+```
+
+### Management Rating
+
+```{r}
+# gauge(amzn_ratings$management, min = 0.0, max = 5.0, symbol = '%', gaugeSectors(
+#   success = c(3.7, 5.0), warning = c(3.0, 3.7), danger = c(1.0, 3.0)
+# ))
+
+valueBox(amzn_ratings$management, color = ifelse(amzn_ratings$management >= mean_seniormanagement, "primary", "warning"))
+```
+
+Row
+-----------------------------------------------------------------------
+
+### Job Titles with Most Reviews
+```{r}
+treemap(filter_top20_titles('Amazon'), 
+                  index="job.title", 
+                  vSize="percent", 
+                  fontsize.labels=10,
+                  palette=terrain.colors(10))
+```
+
+### Anonymous vs Rest Ratings Heatmap
+```{r}
+# treemap(filter_top20_locations('Amazon'), 
+#                   index="location", 
+#                   vSize="percent", 
+#                   title=paste0("Top 20 Location"), 
+#                   fontsize.labels=10,
+#                   palette=terrain.colors(10))
+anon_vs_rest_heatmap <- function(company_name) {
+  heatmap <- reviews %>%
+  mutate(reviewer_type = ifelse(
+    str_detect(job.title, "Anonymous"),
+    ifelse(str_detect(job.title, "Former Employee - Anonymous"), "Former Anonymous", "Current Anonymous"),
+    "Rest of Employees"
+  )) %>%
+  filter(company == company_name) %>%
+  group_by(reviewer_type) %>%
+  summarise(
+    work.balance = mean(work.balance.stars, na.rm = T), culture=mean(culture.values.stars, na.rm = T),
+    opportunities=mean(carrer.opportunities.stars, na.rm = T), benefits=mean(comp.benefit.stars, na.rm = T),
+    management=mean(senior.mangemnet.stars, na.rm = T)) %>% 
+  melt() %>%
+  ggplot(aes(x=variable, y=reviewer_type, fill=value)) +
+  geom_tile(color="white") +
+  scale_fill_gradient2(low="red", high="darkgreen", mid="#ffffbf", midpoint = 3.0, limit=c(1.0, 5.0)) +
+  xlab(NULL) +
+  ylab(NULL)
+  
+  return (heatmap)
+}
+
+anon_vs_rest_heatmap("Amazon")
+```
+
+Row
+-----------------------------------------------------------------------
+
+### Top 20 Words in Review Summary
+```{r}
+
+library("tm")
+library("SnowballC")
+library("wordcloud")
+library("RColorBrewer")
+
+# cleanup
+# Function to clean the corpus
+clean_text <- function(corpus, remove_extra_words) {
+  corpus <- tm_map(corpus, content_transformer(tolower))
+  corpus <- tm_map(corpus, removeWords, stopwords("english"))
+  if (!missing(remove_extra_words)) {
+    corpus <- tm_map(corpus, removeWords, remove_extra_words) 
+  }
+  corpus <- tm_map(corpus, removeNumbers)
+  corpus <- tm_map(corpus, removePunctuation)
+  corpus <- tm_map(corpus, stripWhitespace)
+  return (corpus)
+}
+
+# convert to corpus
+build_summary_df <- function(company_name) {
+  data <- reviews %>%
+    filter(company == company_name)
+  
+  corpus <- Corpus(VectorSource(data$summary))
+  remove_misc <- c("-", "_")
+  cleaned <- clean_text(corpus, remove_misc)
+  tdm <- TermDocumentMatrix(cleaned)
+  tdm <- as.matrix(tdm)
+  tdm.sorted <- sort(rowSums(tdm), decreasing = TRUE)
+  df <- data.frame(word = names(tdm.sorted), freq=tdm.sorted)
+  return (df)
+}
+  
+df_to_word_cloud <- function(df) {
+  return (
+    wordcloud(words = df$word,
+                     freq=df$freq, min.freq=5,
+                     max.words = 100, scale=c(3, .8),
+                     colors=brewer.pal(8, 'Dark2'),
+                    random.order=FALSE, rot.per=0.35,
+                    use.r.layout=FALSE
+                     )    
+  )
+}
+
+amzn_summary_df <- build_summary_df("Amazon")
+
+plot_20words_by_freq <- function(amzn_summary_df) {
+    output <- amzn_summary_df %>%
+      mutate(pct = freq/sum(freq), word=str_to_sentence(word)) %>%
+      top_n(20, pct) %>%      
+      mutate(word = reorder(word, pct)) %>%
+      ggplot(aes(word, pct)) + 
+      geom_bar(stat = "identity") + 
+      xlab(NULL) + ylab(NULL) + 
+      coord_flip()
+  
+    return (output)
+}
+
+plot_20words_by_freq(amzn_summary_df)
+```
+
+### Advice To Management
+```{r}
+# convert to corpus
+build_mgmt_advice_df <- function(company_name) {
+  data <- reviews %>%
+    filter(company == company_name)
+  
+  corpus <- Corpus(VectorSource(data$advice.to.mgmt))
+  remove_misc <- c("-", "_")
+  cleaned <- clean_text(corpus, remove_misc)
+  tdm <- TermDocumentMatrix(cleaned)
+  tdm <- as.matrix(tdm)
+  tdm.sorted <- sort(rowSums(tdm), decreasing = TRUE)
+  df <- data.frame(word = names(tdm.sorted), freq=tdm.sorted)
+  df <- df %>%
+    filter(word != "none")
+  return (df)
+}
+
+amzn_mgmt_df <- build_mgmt_advice_df("Amazon")
+df_to_word_cloud(amzn_mgmt_df)
+```
+
+
+Apple {data-orientation=rows}
+===================================== 
+
+Row 
+-----------------------------------------------------------------------
+
+```{r}
+aapl_ratings <- indi_ratings("Apple")
+```
+
+### Work/Life Balance
+
+```{r}
+# gauge(amzn_ratings$work.balance, min = 0.0, max = 5.0, symbol = '%', gaugeSectors(
+#   success = c(3.7, 5.0), warning = c(3.0, 3.7), danger = c(1.0, 3.0)
+# ))
+show_valueBox(aapl_ratings$work.balance, mean_workbalance)
+```
+
+### Culture
+
+```{r}
+# gauge(amzn_ratings$culture, min = 0.0, max = 5.0, symbol = '%', gaugeSectors(
+#   success = c(3.7, 5.0), warning = c(3.0, 3.7), danger = c(1.0, 3.0)
+# ))
+show_valueBox(aapl_ratings$culture, mean_culture)
+```
+
+### Opportunities
+
+```{r}
+# gauge(amzn_ratings$opportunities, min = 0.0, max = 5.0, symbol = '%', gaugeSectors(
+#   success = c(3.7, 5.0), warning = c(3.0, 3.7), danger = c(1.0, 3.0)
+# ))
+show_valueBox(aapl_ratings$opportunities, mean_opportunities)
+```
+
+### Benefits
+
+```{r}
+# gauge(amzn_ratings$benefits, min = 0.0, max = 5.0, symbol = '%', gaugeSectors(
+#   success = c(3.7, 5.0), warning = c(3.0, 3.7), danger = c(1.0, 3.0)
+# ))
+show_valueBox(aapl_ratings$benefits, mean_benefits)
+```
+
+### Management Rating
+
+```{r}
+# gauge(amzn_ratings$management, min = 0.0, max = 5.0, symbol = '%', gaugeSectors(
+#   success = c(3.7, 5.0), warning = c(3.0, 3.7), danger = c(1.0, 3.0)
+# ))
+show_valueBox(aapl_ratings$management, mean_seniormanagement)
+```
+
+Row
+-----------------------------------------------------------------------
+
+### Job Titles with Most Reviews
+```{r}
+treemap(filter_top20_titles('Apple'), 
+                  index="job.title", 
+                  vSize="percent", 
+                  fontsize.labels=8,
+                  title = "",
+                  palette=terrain.colors(10))
+```
+
+### Anonymous vs Rest Ratings Heatmap
+```{r}
+anon_vs_rest_heatmap("Apple")
+```
+
+Row
+-----------------------------------------------------------------------
+
+### Top 20 Words in Review Summary
+```{r}
+
+aapl_summary_df <- build_summary_df("Apple")
+
+plot_20words_by_freq(aapl_summary_df)
+```
+
+### Advice to Management
+```{r}
+aapl_mgmt_df <- build_mgmt_advice_df("Apple")
+df_to_word_cloud(aapl_mgmt_df)
+```
+
+
+Facebook {data-orientation=rows}
+===================================== 
+
+Row 
+-----------------------------------------------------------------------
+
+```{r}
+fb_ratings <- indi_ratings("Facebook")
+```
+
+### Work/Life Balance
+
+```{r}
+# gauge(amzn_ratings$work.balance, min = 0.0, max = 5.0, symbol = '%', gaugeSectors(
+#   success = c(3.7, 5.0), warning = c(3.0, 3.7), danger = c(1.0, 3.0)
+# ))
+show_valueBox(fb_ratings$work.balance, mean_workbalance)
+```
+
+### Culture
+
+```{r}
+# gauge(amzn_ratings$culture, min = 0.0, max = 5.0, symbol = '%', gaugeSectors(
+#   success = c(3.7, 5.0), warning = c(3.0, 3.7), danger = c(1.0, 3.0)
+# ))
+show_valueBox(fb_ratings$culture, mean_culture)
+```
+
+### Opportunities
+
+```{r}
+# gauge(amzn_ratings$opportunities, min = 0.0, max = 5.0, symbol = '%', gaugeSectors(
+#   success = c(3.7, 5.0), warning = c(3.0, 3.7), danger = c(1.0, 3.0)
+# ))
+show_valueBox(fb_ratings$opportunities, mean_opportunities)
+```
+
+### Benefits
+
+```{r}
+# gauge(amzn_ratings$benefits, min = 0.0, max = 5.0, symbol = '%', gaugeSectors(
+#   success = c(3.7, 5.0), warning = c(3.0, 3.7), danger = c(1.0, 3.0)
+# ))
+show_valueBox(fb_ratings$benefits, mean_benefits)
+```
+
+### Management Rating
+
+```{r}
+# gauge(amzn_ratings$management, min = 0.0, max = 5.0, symbol = '%', gaugeSectors(
+#   success = c(3.7, 5.0), warning = c(3.0, 3.7), danger = c(1.0, 3.0)
+# ))
+show_valueBox(fb_ratings$management, mean_seniormanagement)
+```
+
+Row
+-----------------------------------------------------------------------
+
+### Job Titles with Most Reviews
+```{r}
+treemap(filter_top20_titles('Facebook'), 
+                  index="job.title", 
+                  vSize="percent", 
+                  fontsize.labels=8,
+                  title = "",
+                  palette=terrain.colors(10))
+```
+
+### Anonymous vs Rest Ratings Heatmap
+```{r}
+anon_vs_rest_heatmap("Facebook")
+```
+
+Row
+-----------------------------------------------------------------------
+
+### Top 20 Words in Review Summary
+```{r}
+
+fb_summary_df <- build_summary_df("Facebook")
+
+plot_20words_by_freq(fb_summary_df)
+```
+
+### Advice To Management
+```{r}
+fb_mgmt_df <- build_mgmt_advice_df("Facebook")
+df_to_word_cloud(fb_mgmt_df)
+```
+
+
+Google {data-orientation=rows}
+===================================== 
+
+Row 
+-----------------------------------------------------------------------
+
+```{r}
+goog_ratings <- indi_ratings("Google")
+```
+
+### Work/Life Balance
+
+```{r}
+# gauge(amzn_ratings$work.balance, min = 0.0, max = 5.0, symbol = '%', gaugeSectors(
+#   success = c(3.7, 5.0), warning = c(3.0, 3.7), danger = c(1.0, 3.0)
+# ))
+show_valueBox(goog_ratings$work.balance, mean_workbalance)
+```
+
+### Culture
+
+```{r}
+# gauge(amzn_ratings$culture, min = 0.0, max = 5.0, symbol = '%', gaugeSectors(
+#   success = c(3.7, 5.0), warning = c(3.0, 3.7), danger = c(1.0, 3.0)
+# ))
+show_valueBox(goog_ratings$culture, mean_culture)
+```
+
+### Opportunities
+
+```{r}
+# gauge(amzn_ratings$opportunities, min = 0.0, max = 5.0, symbol = '%', gaugeSectors(
+#   success = c(3.7, 5.0), warning = c(3.0, 3.7), danger = c(1.0, 3.0)
+# ))
+show_valueBox(goog_ratings$opportunities, mean_opportunities)
+```
+
+### Benefits
+
+```{r}
+# gauge(amzn_ratings$benefits, min = 0.0, max = 5.0, symbol = '%', gaugeSectors(
+#   success = c(3.7, 5.0), warning = c(3.0, 3.7), danger = c(1.0, 3.0)
+# ))
+show_valueBox(goog_ratings$benefits, mean_benefits)
+```
+
+### Management Rating
+
+```{r}
+# gauge(amzn_ratings$management, min = 0.0, max = 5.0, symbol = '%', gaugeSectors(
+#   success = c(3.7, 5.0), warning = c(3.0, 3.7), danger = c(1.0, 3.0)
+# ))
+show_valueBox(goog_ratings$management, mean_seniormanagement)
+```
+
+Row
+-----------------------------------------------------------------------
+
+### Job Titles with Most Reviews
+```{r}
+treemap(filter_top20_titles('Google'), 
+                  index="job.title", 
+                  vSize="percent", 
+                  fontsize.labels=8,
+                  title = "",
+                  palette=terrain.colors(10))
+```
+
+### Anonymous vs Rest Ratings Heatmap
+```{r}
+anon_vs_rest_heatmap("Google")
+```
+
+Row
+-----------------------------------------------------------------------
+
+### Top 20 Words in Review Summary
+```{r}
+
+goog_summary_df <- build_summary_df("Google")
+
+plot_20words_by_freq(goog_summary_df)
+```
+
+### Advice To Management
+```{r}
+goog_mgmt_df <- build_mgmt_advice_df("Google")
+df_to_word_cloud(goog_mgmt_df)
+```
+
+
+Microsoft {data-orientation=rows}
+===================================== 
+
+Row 
+-----------------------------------------------------------------------
+
+```{r}
+msft_ratings <- indi_ratings("Microsoft")
+```
+
+### Work/Life Balance
+
+```{r}
+# gauge(amzn_ratings$work.balance, min = 0.0, max = 5.0, symbol = '%', gaugeSectors(
+#   success = c(3.7, 5.0), warning = c(3.0, 3.7), danger = c(1.0, 3.0)
+# ))
+show_valueBox(msft_ratings$work.balance, mean_workbalance)
+```
+
+### Culture
+
+```{r}
+# gauge(amzn_ratings$culture, min = 0.0, max = 5.0, symbol = '%', gaugeSectors(
+#   success = c(3.7, 5.0), warning = c(3.0, 3.7), danger = c(1.0, 3.0)
+# ))
+show_valueBox(msft_ratings$culture, mean_culture)
+```
+
+### Opportunities
+
+```{r}
+# gauge(amzn_ratings$opportunities, min = 0.0, max = 5.0, symbol = '%', gaugeSectors(
+#   success = c(3.7, 5.0), warning = c(3.0, 3.7), danger = c(1.0, 3.0)
+# ))
+show_valueBox(msft_ratings$opportunities, mean_opportunities)
+```
+
+### Benefits
+
+```{r}
+# gauge(amzn_ratings$benefits, min = 0.0, max = 5.0, symbol = '%', gaugeSectors(
+#   success = c(3.7, 5.0), warning = c(3.0, 3.7), danger = c(1.0, 3.0)
+# ))
+show_valueBox(msft_ratings$benefits, mean_benefits)
+```
+
+### Management Rating
+
+```{r}
+# gauge(amzn_ratings$management, min = 0.0, max = 5.0, symbol = '%', gaugeSectors(
+#   success = c(3.7, 5.0), warning = c(3.0, 3.7), danger = c(1.0, 3.0)
+# ))
+show_valueBox(msft_ratings$management, mean_seniormanagement)
+```
+
+Row
+-----------------------------------------------------------------------
+
+### Job Titles with Most Reviews
+```{r}
+treemap(filter_top20_titles('Microsoft'), 
+                  index="job.title", 
+                  vSize="percent", 
+                  fontsize.labels=8,
+                  title = "",
+                  palette=terrain.colors(10))
+```
+
+### Anonymous vs Rest Ratings Heatmap
+```{r}
+anon_vs_rest_heatmap("Microsoft")
+```
+
+Row
+-----------------------------------------------------------------------
+
+### Top 20 Words in Review Summary
+```{r}
+
+msft_summary_df <- build_summary_df("Microsoft")
+
+plot_20words_by_freq(msft_summary_df)
+```
+
+### Advice To Management
+```{r}
+msft_mgmt_df <- build_mgmt_advice_df("Microsoft")
+df_to_word_cloud(msft_mgmt_df)
+```
+
+
+Netflix {data-orientation=rows}
+===================================== 
+
+Row 
+-----------------------------------------------------------------------
+
+```{r}
+nflx_ratings <- indi_ratings("Netflix")
+```
+
+### Work/Life Balance
+
+```{r}
+# gauge(amzn_ratings$work.balance, min = 0.0, max = 5.0, symbol = '%', gaugeSectors(
+#   success = c(3.7, 5.0), warning = c(3.0, 3.7), danger = c(1.0, 3.0)
+# ))
+show_valueBox(nflx_ratings$work.balance, mean_workbalance)
+```
+
+### Culture
+
+```{r}
+# gauge(amzn_ratings$culture, min = 0.0, max = 5.0, symbol = '%', gaugeSectors(
+#   success = c(3.7, 5.0), warning = c(3.0, 3.7), danger = c(1.0, 3.0)
+# ))
+show_valueBox(nflx_ratings$culture, mean_culture)
+```
+
+### Opportunities
+
+```{r}
+# gauge(amzn_ratings$opportunities, min = 0.0, max = 5.0, symbol = '%', gaugeSectors(
+#   success = c(3.7, 5.0), warning = c(3.0, 3.7), danger = c(1.0, 3.0)
+# ))
+show_valueBox(msft_ratings$opportunities, mean_opportunities)
+```
+
+### Benefits
+
+```{r}
+# gauge(amzn_ratings$benefits, min = 0.0, max = 5.0, symbol = '%', gaugeSectors(
+#   success = c(3.7, 5.0), warning = c(3.0, 3.7), danger = c(1.0, 3.0)
+# ))
+show_valueBox(nflx_ratings$benefits, mean_benefits)
+```
+
+### Management Rating
+
+```{r}
+# gauge(amzn_ratings$management, min = 0.0, max = 5.0, symbol = '%', gaugeSectors(
+#   success = c(3.7, 5.0), warning = c(3.0, 3.7), danger = c(1.0, 3.0)
+# ))
+show_valueBox(nflx_ratings$management, mean_seniormanagement)
+```
+
+Row
+-----------------------------------------------------------------------
+
+### Job Titles with Most Reviews
+```{r}
+treemap(filter_top20_titles('Netflix'), 
+                  index="job.title", 
+                  vSize="percent", 
+                  fontsize.labels=8,
+                  title = "",
+                  palette=terrain.colors(10))
+```
+
+### Anonymous vs Rest Ratings Heatmap
+```{r}
+anon_vs_rest_heatmap("Netflix")
+```
+
+Row
+-----------------------------------------------------------------------
+
+### Top 20 Words in Review Summary
+```{r}
+
+nflx_summary_df <- build_summary_df("Netflix")
+
+plot_20words_by_freq(nflx_summary_df)
+```
+
+### Advice To Management
+```{r}
+nflx_mgmt_df <- build_mgmt_advice_df("Netflix")
+df_to_word_cloud(nflx_mgmt_df)
+```
+
+Common {data-orientation=column}
+=====================================
+
+This dashboard was developed using glassdoor reviews dataset available [here](https://www.kaggle.com/petersunga/google-amazon-facebook-employee-reviews).
+
+
+The dataset contains over 67k employee reviews for Google, Amazon, Facebook, Apple, and Microsoft.
+All the ratings are between 1-5.
+
+
+| Field | Description |
+| ----- | ----------- |
+|Work/Life Balance Rating|1-5|
+|Culture and Values Rating|1-5|
+|Career Opportunities Rating|1-5|
+|Comp & Benefits Rating|1-5|
+|Senior Management Rating|1-5|
+
+<!-- Common {data-orientation=column} -->
+<!-- =====================================  -->
