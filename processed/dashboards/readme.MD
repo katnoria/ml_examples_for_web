@@ -2,4 +2,4 @@
 
 This folder contains the code used for my post of making [dashboards]()
 
-- [x] Flexdasboard: Employee Reviews
+- [x] Flexdasboard: Employee Reviews [DEMO](https://dash.sprinkleai.com/flexdash/)
