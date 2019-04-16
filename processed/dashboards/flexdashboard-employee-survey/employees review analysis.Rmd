@@ -1,0 +1,799 @@
+---
+title: "Employee Satisfaction Survey"
+author: "katnoria"
+output:
+  html_document:
+    df_print: paged
+    toc: yes
+  html_notebook:
+    code_folding: hide
+    theme: spacelab
+    toc: yes
+date: "16/03/2019"
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(knitr)
+library(dplyr)
+library(ggplot2)
+library(stringr)
+set.seed(12345)
+
+reviews <- read.csv('data/employee_reviews.csv', stringsAsFactors = F)
+head(reviews)
+```
+
+
+```{r}
+# Convert ratings to double
+reviews <- reviews %>%
+  mutate(
+    company = str_to_sentence(company),
+    work.balance.stars = as.numeric(work.balance.stars), culture.values.stars=as.numeric(culture.values.stars),
+    carrer.opportunities.stars=as.numeric(carrer.opportunities.stars),
+    comp.benefit.stars=as.numeric(comp.benefit.stars), senior.mangemnet.stars=as.numeric(senior.mangemnet.stars)
+    )
+
+head(reviews, 1)
+```
+
+# Analysis
+
+How many companies are there in the dataset?
+```{r  echo=FALSE, warning=FALSE, message=FALSE}
+reviews %>%
+  group_by(company) %>%
+  summarise(n=n()) %>%
+  mutate(pct = n/sum(n)*100)
+```
+
+Show me the Ratings Info
+
+```{r}
+reviews %>%
+  summarise(mean_overall_ratings=mean(overall.ratings), med_overall_ratings=median(overall.ratings))
+
+reviews %>%
+  group_by(overall.ratings) %>%
+  summarise(n=n()) %>%
+  ggplot(aes(overall.ratings, n)) + 
+  geom_bar(stat = "Identity")
+```
+
+
+What are the top 10 reviewer location
+```{r}
+reviews %>%
+  group_by(company, location) %>%
+  summarise(n=n()) %>%
+  filter(n > 10)
+```
+
+```{r}
+library(leaflet)
+locations <- read.csv("data/locations_review_25above.csv")
+reviews2 <- reviews %>%
+  left_join(locations, by = "location") %>%
+  select(c("location", "lat", "lon")) %>%
+  filter(location != "none")
+
+# Make sure locations is loaded (locations_review_25above.csv)
+# leaflet(reviews2) %>% addTiles() %>%
+#   addMarkers(clusterOptions = markerClusterOptions())
+```
+
+
+## Overall Ratings
+
+Rank the companies by overall ratings
+
+```{r}
+reviews %>%
+  group_by(company) %>%
+  summarise(ratings = mean(as.numeric(overall.ratings)), n=n())
+```
+
+
+```{r}
+theme_Publication <- function(base_size=14, base_family="helvetica") {
+      library(grid)
+      library(ggthemes)
+      (theme_foundation(base_size=base_size, base_family=base_family)
+       + theme(plot.title = element_text(face = "bold",
+                                         size = rel(1.2), hjust = 0.5),
+               text = element_text(),
+               panel.background = element_rect(colour = NA),
+               plot.background = element_rect(colour = NA),
+               panel.border = element_rect(colour = NA),
+               axis.title = element_text(face = "bold",size = rel(1)),
+               axis.title.y = element_text(angle=90,vjust =2),
+               axis.title.x = element_text(vjust = -0.2),
+               axis.text = element_text(), 
+               axis.line = element_line(colour="black"),
+               axis.ticks = element_line(),
+               panel.grid.major = element_line(colour="#f0f0f0"),
+               panel.grid.minor = element_blank(),
+               legend.key = element_rect(colour = NA),
+               legend.position = "bottom",
+               legend.direction = "horizontal",
+               legend.key.size= unit(0.2, "cm"),
+               legend.margin = unit(0, "cm"),
+               legend.title = element_text(face="italic"),
+               plot.margin=unit(c(10,5,5,5),"mm"),
+               strip.background=element_rect(colour="#f0f0f0",fill="#f0f0f0"),
+               strip.text = element_text(face="bold")
+          ))
+      
+}
+
+```
+
+```{r  echo=FALSE, warning=FALSE, message=FALSE}
+ratings <- reviews %>%
+  group_by(company) %>%
+  summarise(ratings = mean(as.numeric(overall.ratings)), n=n())
+
+
+ratings %>%
+  mutate(company= reorder(company, ratings)) %>%
+  ggplot(aes(company, ratings)) +
+  labs(title="Employee Ratings", y="Rating", x="") + 
+  geom_bar(stat="identity") +
+  coord_flip()
+```
+
+Lets dig into the distribution of overall ratings
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+# reviews %>%
+#   select(c(company, overall.ratings)) %>%
+#   ggplot(aes(overall.ratings, company)) + 
+#   geom_point()
+  
+reviews %>%
+  select(c(company, overall.ratings)) %>%
+  ggplot(aes(overall.ratings, fill=company)) +
+  xlab("Overall Rating") +
+  ylab("Number of Reviews") + 
+  geom_histogram(binwidth = 1) + 
+  facet_wrap(~company)
+
+
+  # ggplot(aes(y=company, x=overall.ratings)) +
+  # geom_line(aes(group=company)) +
+  # geom_point(aes(overall.ratings))
+
+```
+
+Amazon and Microsoft employees have left the most reviews. Lets see the review count for each company.
+
+```{r  echo=FALSE, warning=FALSE, message=FALSE}
+
+reviews %>%
+  group_by(company) %>%
+  summarise(n=n()) %>%
+  mutate(company = reorder(company, n)) %>%
+  ggplot(aes(company, n)) +
+  labs(title="Number of survey participants", x="", y="Count of Participants") + 
+  geom_bar(stat = "identity") + 
+  coord_flip()
+```
+
+A better representation is to view the distribution of reviews by percent.
+```{r  echo=FALSE, warning=FALSE, message=FALSE}
+reviews %>%
+  select(c(company, overall.ratings)) %>%
+  group_by(company, overall.ratings) %>%
+  summarise(n=n()) %>%
+  mutate(overall.ratings.pct = n/sum(n)) %>%
+  ggplot(aes(overall.ratings, overall.ratings.pct, fill=company)) +
+  xlab("Overall Rating") +
+  ylab("Reviews (%)") +
+  geom_bar(stat = "identity") +
+  facet_wrap(~company)
+
+```
+
+## Work/Life Balance
+
+Rank the companies by work balance
+```{r  echo=FALSE, warning=FALSE, message=FALSE}
+reviews %>%
+  group_by(company) %>%
+  summarise(work.balance = mean(work.balance.stars, na.rm = T)) %>%
+  mutate(company = reorder(company, work.balance)) %>%
+  ggplot(aes(company, work.balance)) + 
+  labs(title="Companies Ranked by Work/Life Balance", x="Work/Life Balance", y="Rating") +
+  geom_bar(stat="identity") + 
+  coord_flip()
+```
+
+We see that Google and Facebook lead the pack here.
+
+## Ratings Heatmap
+
+We can plot a heatmap of companies across multiple rating attributes.
+```{r  echo=FALSE, warning=FALSE, message=FALSE}
+library(reshape2)
+library(ggplot2)
+
+ratings <- reviews %>%
+  group_by(company) %>%
+  summarise(
+    work.balance = mean(work.balance.stars, na.rm = T), culture=mean(culture.values.stars, na.rm = T),
+    opportunities=mean(carrer.opportunities.stars, na.rm = T), benefits=mean(comp.benefit.stars, na.rm = T),
+    management=mean(senior.mangemnet.stars, na.rm = T))
+
+melt(ratings) %>%
+  ggplot(aes(x=variable, y=company, fill=value)) +
+  geom_tile(color="white") +
+  labs(title="Employee Ratings Across All Categories") +
+  scale_fill_gradient2(low="red", high="darkgreen", mid="#ffffbf", midpoint = 3.0, limit=c(1.0, 5.0)) +
+  xlab(NULL) +
+  ylab(NULL)
+
+```
+
+
+## Job Titles
+
+Q: What is the distribution of job title ? 
+
+```{r  echo=FALSE, warning=FALSE, message=FALSE}
+reviews %>%
+  group_by(company, job.title) %>%
+  summarise(n=n()) %>%
+  summarise(n=sum(n), unique_titles=length(unique(job.title)), pct=sum(n)/length(unique(job.title)))
+
+```
+
+## Top Reviewers
+
+Who are top 10% of reviewers ?
+
+```{r  echo=FALSE, warning=FALSE, message=FALSE}
+top_ten_reviewers <- function(company_name)  {
+  plot <- reviews %>%
+    filter(company == company_name) %>%
+    group_by(job.title) %>%
+    summarise(n=n()) %>%
+    mutate(freq = n/sum(n)) %>%
+    mutate(job.title = reorder(job.title, freq)) %>%
+    top_n(10) %>%
+    ggplot(aes(job.title, freq)) + 
+    geom_bar(stat="identity") + 
+    labs(title = str_to_sentence(company_name), x="Job Title", y="Reviewers (%)") +
+    coord_flip()
+  
+  return (plot)
+}
+
+# reviews %>%
+#   filter(company == 'netflix') %>%
+#   group_by(job.title) %>%
+#   summarise(n=n()) %>%
+#   mutate(freq = n/sum(n)) %>%
+#   mutate(job.title = reorder(job.title, freq)) %>%
+#   top_n(10) %>%
+#   ggplot(aes(job.title, freq)) + 
+#   geom_bar(stat="identity") + 
+#   coord_flip()
+
+top_ten_reviewers('Netflix')
+
+```
+
+Lets plot top 5 reviewers from  all five companies.
+```{r echo=FALSE, warning=FALSE, message=FALSE, fig.height=7, fig.width=7, message=FALSE}
+reviews %>%
+  group_by(company, job.title) %>%
+  summarise(n=n()) %>%
+  mutate(freq = n/sum(n)) %>%
+  mutate(job.title = reorder(job.title, freq)) %>%
+  top_n(5) %>%
+  ggplot(aes(job.title, freq)) + 
+  geom_bar(stat="identity") + 
+  coord_flip() + 
+  facet_grid(~company)
+
+```
+
+You're correct. We cannot expect to find same job titles across the companies. But we now know a few things:
+
+* Most reviewers are anonymous current or former employees
+* There are very few facebook employees who post reviews as anonymous ?
+* Google has the most anonymous current employee reviewers
+
+
+Lets do it again, this time for each company separately.
+```{r  echo=FALSE, warning=FALSE, message=FALSE}
+top_ten_reviewers('Amazon')
+top_ten_reviewers('Apple')
+top_ten_reviewers('Facebook')
+top_ten_reviewers('Google')
+top_ten_reviewers('Microsoft')
+```
+
+Will treemap show the job titles better? Well, there is only one way to find out.
+
+```{r  echo=FALSE, warning=FALSE, message=FALSE}
+# install.packages("treemap")
+library(treemap)
+
+grouped_job_title <- reviews %>%
+  filter(company == "Amazon") %>%
+  group_by(job.title) %>%
+  summarise(n=n()) %>%
+  mutate(freq = n/sum(n)) %>%
+  mutate(job.title = reorder(job.title, freq))
+
+treemap(grouped_job_title, index="job.title", vSize="freq")
+
+```
+
+Nice, it can definitely go as #generativeart
+
+However, its a bit difficult to read. If we restrict the plot to Top 20 job titles, we get 55% of the reviewers.
+
+```{r  echo=FALSE, warning=FALSE, message=FALSE}
+reviews %>%
+  filter(company == "Amazon") %>%
+  group_by(job.title) %>%
+  summarise(n=n()) %>%
+  mutate(freq = n/sum(n)) %>%
+  mutate(job.title = reorder(job.title, freq)) %>%
+  top_n(20) %>%
+  tally(freq)
+  
+```
+
+
+```{r  echo=FALSE, warning=FALSE, message=FALSE}
+
+# plot_treemap <- function(company_name) {
+#   grouped_job_title <- reviews %>%
+#     filter(company == company_name) %>%
+#     group_by(job.title) %>%
+#     summarise(n=n()) %>%
+#     mutate(percent = n/sum(n)) %>%
+#     mutate(job.title = reorder(job.title, percent)) %>%
+#     top_n(20)
+#   
+#   plot <- treemap(grouped_job_title, 
+#                   index="job.title", 
+#                   vSize="percent", 
+#                   title=paste0("Top 20 Job Titles: ", company_name), 
+#                   fontsize.labels=10,
+#                   palette=terrain.colors(10))
+#   return (plot)
+#   
+# }
+# 
+# The treemap function silently returns a list and we just need to show the plot
+# z <- plot_treemap("Amazon")
+
+
+
+filter_top20_titles <- function(company_name) {
+  grouped_job_title <- reviews %>%
+    filter(company == company_name) %>%
+    group_by(job.title) %>%
+    summarise(n=n()) %>%
+      mutate(percent = n/sum(n)) %>%
+      mutate(job.title = reorder(job.title, percent)) %>%
+      top_n(20)
+  
+  return (grouped_job_title)
+}
+
+# Doing it this way works, just shows the plot
+treemap(filter_top20_titles('Amazon'), 
+                  index="job.title", 
+                  vSize="percent", 
+                  title=paste0("Top 20 Job Titles: Apple"), 
+                  fontsize.labels=10,
+                  palette=terrain.colors(10))
+
+```
+```{r}
+
+treemap(filter_top20_titles('Apple'), 
+                  index="job.title", 
+                  vSize="percent", 
+                  title=paste0("Top 20 Job Titles: Apple"), 
+                  fontsize.labels=10,
+                  palette=terrain.colors(10))
+
+```
+```{r}
+company_name = "Facebook"
+treemap(filter_top20_titles(company_name), 
+                  index="job.title", 
+                  vSize="percent", 
+                  title=paste0("Top 20 Job Titles:", company_name), 
+                  fontsize.labels=10,
+                  palette=terrain.colors(10))
+
+```
+
+```{r}
+company_name = "Google"
+treemap(filter_top20_titles(company_name), 
+                  index="job.title", 
+                  vSize="percent", 
+                  title=paste0("Top 20 Job Titles:", company_name), 
+                  fontsize.labels=10,
+                  palette=terrain.colors(10))
+
+```
+
+```{r}
+company_name = "Microsoft"
+treemap(filter_top20_titles(company_name), 
+                  index="job.title", 
+                  vSize="percent", 
+                  title=paste0("Top 20 Job Titles:", company_name), 
+                  fontsize.labels=10,
+                  palette=terrain.colors(10))
+
+```
+
+```{r}
+company_name = "Netflix"
+treemap(filter_top20_titles(company_name), 
+                  index="job.title", 
+                  vSize="percent", 
+                  title=paste0("Top 20 Job Titles:", company_name), 
+                  fontsize.labels=10,
+                  palette=terrain.colors(10))
+
+```
+
+## Anonymous Reviewers
+
+Most reviewers are Anonymous, lets compare the distribution of overall rating between former and current anonymous reviewers
+
+```{r  echo=FALSE, warning=FALSE, message=FALSE}
+reviews %>%
+  filter(str_detect(job.title, "Anonymous")) %>%
+  group_by(company, overall.ratings, job.title) %>%
+  summarise(n=n()) %>%
+  mutate(overall.ratings.pct = n/sum(n), title=ifelse(str_detect(job.title, "Current"), "Current", "Former")) %>%
+  ggplot(aes(overall.ratings, overall.ratings.pct, fill=title)) +
+  geom_bar(position = "dodge", stat = "identity") + 
+  labs(title="Overall Rating Distribution Between Current and Former Anonymous Reviewers", x="Overall Rating", y="Reviews (%)") +
+  facet_wrap(~company)
+```
+
+```{r}
+ reviews %>%
+  mutate(reviewer_type = ifelse(
+    str_detect(job.title, "Anonymous"),
+    ifelse(str_detect(job.title, "Former Employee - Anonymous"), "Former Anonymous", "Current Anonymous"),
+    "Rest"
+  )) %>%
+  filter(company == "amazon") %>%
+  group_by(reviewer_type, overall.ratings) %>%
+  summarise(n=n()) %>%
+  mutate(overall.ratings.pct = n/sum(n)) %>%
+  ggplot(aes(overall.ratings, overall.ratings.pct, fill=reviewer_type)) +
+  geom_bar(position = "dodge", stat = "identity") + 
+  labs(title="Overall Ratings Distribution: Anonymous and Other Reviewers", 
+       x="Overall Rating", y="Reviews (%)",
+       fill = "Reviewer Type")
+
+```
+
+Former reviewers tend to give lower ratings (between 1-3) compared to current. Perhaps, that is the reason they left in first place.
+This is particularly noticable in Facebook and Netflix reviews.
+
+
+```{r}
+reviews %>%
+  mutate(reviewer_type = ifelse(
+    str_detect(job.title, "Anonymous"),
+    ifelse(str_detect(job.title, "Former Employee - Anonymous"), "Former Anonymous", "Current Anonymous"),
+    "Rest"
+  )) %>%
+  filter(company == "Amazon") %>%
+  group_by(reviewer_type) %>%
+  summarise(
+    work.balance = mean(work.balance.stars, na.rm = T), culture=mean(culture.values.stars, na.rm = T),
+    opportunities=mean(carrer.opportunities.stars, na.rm = T), benefits=mean(comp.benefit.stars, na.rm = T),
+    management=mean(senior.mangemnet.stars, na.rm = T)) %>% 
+  melt() %>%
+  ggplot(aes(x=variable, y=reviewer_type, fill=value)) +
+  geom_tile(color="white") +
+  labs(title="Anonymous vs Rest Ratings in Each Category") +
+  scale_fill_gradient2(low="red", high="darkgreen", mid="#ffffbf", midpoint = 3.0, limit=c(1.0, 5.0)) +
+  xlab(NULL) +
+  ylab(NULL)
+```
+
+
+Q: Can we identify the areas rated low ?
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+
+reviews %>%
+  filter(str_detect(job.title, "Former") & str_detect(job.title, "Anonymous"))%>%
+  group_by(company) %>%
+  summarise(
+    work.balance = mean(work.balance.stars, na.rm = T), culture=mean(culture.values.stars, na.rm = T),
+    opportunities=mean(carrer.opportunities.stars, na.rm = T), benefits=mean(comp.benefit.stars, na.rm = T),
+    management=mean(senior.mangemnet.stars, na.rm = T)) %>% 
+  melt() %>%
+  ggplot(aes(x=variable, y=company, fill=value)) +
+  geom_tile(color="white") +
+  labs(title="Former Anonymous Employee Ratings in Each Category") +
+  scale_fill_gradient2(low="red", high="darkgreen", mid="#ffffbf", midpoint = 3.0, limit=c(1.0, 5.0)) +
+  xlab(NULL) +
+  ylab(NULL)
+
+```
+
+The top reason was work/life balance, followed by management and opportunities.
+
+```{r  echo=FALSE, warning=FALSE, message=FALSE}
+reviews %>%
+  filter(str_detect(job.title, "Current") & str_detect(job.title, "Anonymous"))%>%
+  group_by(company) %>%
+  summarise(
+    work.balance = mean(work.balance.stars, na.rm = T), culture=mean(culture.values.stars, na.rm = T),
+    opportunities=mean(carrer.opportunities.stars, na.rm = T), benefits=mean(comp.benefit.stars, na.rm = T),
+    management=mean(senior.mangemnet.stars, na.rm = T)) %>% 
+  melt() %>%
+  ggplot(aes(x=variable, y=company, fill=value)) +
+  geom_tile(color="white") +
+  labs(title="Current Anonymous Employee Ratings in Each Category") +
+  scale_fill_gradient2(low="red", high="darkgreen", mid="#ffffbf", midpoint = 3.0, limit=c(1.0, 5.0)) +
+  xlab(NULL) +
+  ylab(NULL)
+```
+
+
+
+# Text Analysis
+
+In this section, We will perform text analysis on review summary, pros and cons as well as advice to management.
+
+## Word Cloud 
+
+We start by generating word cloud of review summary.
+
+### Review Summary
+Q: What are employees talking about in their reviews ?
+
+We start by generating word cloud of summary data available in each review.
+
+**Amazon**
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+library("tm")
+library("SnowballC")
+library("wordcloud")
+library("RColorBrewer")
+
+# cleanup
+# Function to clean the corpus
+clean_text <- function(corpus, remove_extra_words) {
+  corpus <- tm_map(corpus, content_transformer(tolower))
+  corpus <- tm_map(corpus, removeWords, stopwords("english"))
+  if (!missing(remove_extra_words)) {
+    corpus <- tm_map(corpus, removeWords, remove_extra_words) 
+  }
+  corpus <- tm_map(corpus, removeNumbers)
+  corpus <- tm_map(corpus, removePunctuation)
+  corpus <- tm_map(corpus, stripWhitespace)
+  return (corpus)
+}
+
+# convert to corpus
+summary_cloud <- function(company_name) {
+  data <- reviews %>%
+    filter(company == company_name)
+  
+  corpus <- Corpus(VectorSource(data$summary))
+  remove_misc <- c("-", "_")
+  cleaned <- clean_text(corpus, remove_misc)
+  tdm <- TermDocumentMatrix(cleaned)
+  tdm <- as.matrix(tdm)
+  tdm.sorted <- sort(rowSums(tdm), decreasing = TRUE)
+  df <- data.frame(word = names(tdm.sorted), freq=tdm.sorted)
+  wc <- wordcloud(words = df$word, freq=df$freq, min.freq=5, max.words = 100, scale=c(3, .8), colors=brewer.pal(8, 'Dark2'), main=company_name)
+  
+  output = list("company" = company_name, "data.frame" = df, "wordcloud" =  wc)
+  return (output)
+}
+
+amzn_summary_plot <- summary_cloud("Amazon")
+amzn_summary_plot$wordcloud
+```
+
+```{r}
+plot_20words_by_freq <- function(summary_plot) {
+    output <- summary_plot$data.frame %>%
+      mutate(pct = freq/sum(freq)) %>%
+      top_n(20, pct) %>%      
+      mutate(word = reorder(word, pct)) %>%
+      ggplot(aes(word, pct)) + 
+      geom_bar(stat = "identity") + 
+      labs(title = paste0("Top 20 words: ", summary_plot$company, x= NULL, y = NULL)) + 
+      coord_flip()
+  
+    return (output)
+}
+
+plot_20words_by_freq(amzn_summary_plot)
+```
+
+
+**Apple**
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+
+aapl_summary_plot <- summary_cloud("Apple")
+aapl_summary_plot$wordcloud
+
+```
+```{r}
+plot_20words_by_freq(aapl_summary_plot)  
+```
+
+**Facebook**
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+fb_summary_plot <- summary_cloud('Facebook')
+fb_summary_plot$wordcloud
+```
+
+```{r}
+plot_20words_by_freq(fb_summary_plot)  
+```
+
+
+**Google**
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+goog_summary_plot <- summary_cloud('Google')
+goog_summary_plot$wordcloud
+```
+
+```{r}
+plot_20words_by_freq(goog_summary_plot)  
+```
+
+
+**Microsoft**
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+msft_summary_plot <- summary_cloud('Microsoft')
+msft_summary_plot$wordcloud
+```
+
+```{r}
+plot_20words_by_freq(msft_summary_plot)  
+```
+
+
+**Netflix**
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+nflx_summary_plot <- summary_cloud('Netflix')
+nflx_summary_plot$word_cloud
+```
+
+```{r}
+plot_20words_by_freq(nflx_summary_plot)
+```
+
+If we combine the data frame of top 20 words from each company, will that show us any useful insight ?
+
+```{r echo=FALSE, warning=FALSE, message=FALSE, fig.height=7, fig.width=7, message=FALSE}
+library(tidyr)
+
+filter_words <- c("Ever", "Get", "Call", "Can")
+
+filter_20words_by_pct <- function(summary_plot) {
+  company <- summary_plot$company
+    output <- summary_plot$data.frame %>%
+      filter(str_to_sentence(word) != company & !str_to_sentence(word) %in% filter_words) %>%
+      mutate(pct = freq/sum(freq)) %>%
+      top_n(20, pct) %>%
+      select(c(word, pct)) 
+
+    return (output)
+}
+
+amzn.top20words <- filter_20words_by_pct(amzn_summary_plot)
+aapl.top20words <- filter_20words_by_pct(aapl_summary_plot)
+fb.top20words <- filter_20words_by_pct(fb_summary_plot)
+goog.top20words <- filter_20words_by_pct(goog_summary_plot)
+msft.top20words <- filter_20words_by_pct(msft_summary_plot)
+nflx.top20words <- filter_20words_by_pct(nflx_summary_plot)
+
+
+
+all_top20words <- amzn.top20words %>%
+  mutate(Amazon=pct) %>%
+  select(-pct) %>%
+  full_join(aapl.top20words, by = "word") %>%
+  mutate(Apple=pct) %>%
+  select(-pct) %>%
+  full_join(fb.top20words, by = "word") %>%
+  mutate(Facebook=pct) %>%
+  select(-pct) %>%
+  full_join(goog.top20words, by = "word") %>%
+  mutate(Google=pct) %>%
+  select(-pct) %>%
+  full_join(msft.top20words, by = "word") %>%
+  mutate(Microsoft=pct) %>%
+  select(-pct) %>%
+  full_join(nflx.top20words, by = "word") %>%
+  mutate(Netflix=pct) %>%
+  select(-pct)
+
+
+
+all_top20words.ready <- all_top20words %>%
+  mutate(word = str_to_sentence(word)) %>%
+  gather(key="company", value="pct", -word)
+
+all_top20words.ready %>%
+  ggplot(mapping = aes(x=company, y=word, fill=pct)) +
+  geom_tile() +
+  scale_fill_gradient(name="Percent", low = "white", high = "darkgreen") + 
+  labs(title="Most Common Words in Summary") +
+  xlab(NULL) +
+  ylab(NULL)
+  
+
+```
+
+
+### Advice to Management
+
+Q: What is their advice to senior management ?
+```{r}
+# convert to corpus
+mgmt_advice_cloud <- function(company_name) {
+  data <- reviews %>%
+    filter(company == company_name & str_to_lower(advice.to.mgmt) != "none")
+  
+  corpus <- Corpus(VectorSource(data$advice.to.mgmt))
+  remove_misc <- c("-", "_")
+  cleaned <- clean_text(corpus, remove_misc)
+  tdm <- TermDocumentMatrix(cleaned)
+  tdm <- as.matrix(tdm)
+  tdm.sorted <- sort(rowSums(tdm), decreasing = TRUE)
+  df <- data.frame(word = names(tdm.sorted), freq=tdm.sorted)
+  wc <- wordcloud(words = df$word, freq=df$freq, min.freq=5, max.words = 75, scale=c(3, .8), colors=brewer.pal(8, 'Dark2'), main=company_name)
+  
+  return (wc)
+}
+
+mgmt_advice_cloud("Amazon")
+```
+
+
+**Apple**
+```{r}
+mgmt_advice_cloud("Apple")
+```
+
+**Facebook**
+```{r}
+mgmt_advice_cloud("Facebook")
+```
+
+**Google**
+```{r}
+mgmt_advice_cloud("Google")
+```
+
+**Microsoft**
+```{r}
+mgmt_advice_cloud("Microsoft")
+```
+
+**Netflix**
+```{r}
+mgmt_advice_cloud("Netflix")
+```

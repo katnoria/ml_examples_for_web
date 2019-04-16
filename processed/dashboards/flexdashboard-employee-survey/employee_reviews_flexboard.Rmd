@@ -5,7 +5,7 @@ url: "https://dash.sprinkleai.com/flexdash"
 output: 
   flexdashboard::flex_dashboard:
     navbar: 
-#      - {title: "R Markdown", href="#", alight=left}    
+     - {title: "R Markdown", href="dash.sprinkleai.com/reviews", alight=left}
 ---
 
 ```{r}
